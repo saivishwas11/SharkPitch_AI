@@ -1,0 +1,15 @@
+langchain
+langgraph
+langchain-openai
+python-dotenv
+
+torch
+transformers
+openai-whisper
+
+librosa
+soundfile
+pydub
+webrtcvad
+
+ffmpeg-python

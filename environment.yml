@@ -1,0 +1,9 @@
+name: athena_assignment
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    # Add your pip packages here from requirements.txt if needed
