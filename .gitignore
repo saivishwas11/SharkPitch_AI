@@ -205,3 +205,27 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Backend specific
+backend/athena_task.log
+backend/*.log
+backend/.env
+backend/.venv
+backend/venv/
+
+# Frontend specific (Node.js/Bun)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/.vite/
+frontend/.bun/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
