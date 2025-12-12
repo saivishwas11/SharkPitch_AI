@@ -139,37 +139,78 @@ def invoke_llm(messages: List[Any], temperature: float = 0.0):
 # Backwards-compatible function used by sharks in some versions
 def run_shark_persona(name: str, style: str, transcript: str, delivery_score: float, content_analysis: Dict[str, Any]):
     """
-    Simple adapter to call the LLM for a shark persona. Returns parsed JSON if possible,
-    otherwise returns a fallback dict.
+    Simple adapter to call the LLM for a shark persona using Gemini API.
+    Returns parsed JSON if possible, otherwise returns a fallback dict.
     """
-    from langchain_core.messages import SystemMessage, HumanMessage  # imported here to avoid top-level dependency
-
-    SHARK_SYSTEM_TEMPLATE = """You are {name}. Style: {style}. Return JSON only as described."""
-    sys_prompt = SHARK_SYSTEM_TEMPLATE.format(name=name, style=style)
-    content_summary = ""
-    if content_analysis:
-        cs = content_analysis.get("content_score")
-        content_summary = f"Content score: {cs}\n"
-        if "master_summary" in content_analysis:
-            content_summary += f"Summary: {content_analysis.get('master_summary')}\n"
-
-    human_text = (
-        f"Delivery score: {delivery_score}\n"
-        f"{content_summary}\n"
-        f"Full transcript:\n{transcript}"
-    )
-
-    resp = invoke_llm([SystemMessage(content=sys_prompt), HumanMessage(content=human_text)], temperature=0.7)
-    raw_text = getattr(resp, "content", str(resp))
     try:
-        parsed = parse_json_safely(raw_text)
-        return parsed
-    except Exception:
-        logger.exception("Shark persona output parse failed; returning fallback.")
-        return {
-            "name": name,
-            "feedback": raw_text[:1000],
-            "tips": [],
-            "verdict": "Need More Info",
-            "_raw": raw_text,
-        }
+        # Configure Gemini
+        import google.generativeai as genai
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.warning("GEMINI_API_KEY not set, falling back to dummy response")
+            return get_dummy_response(name)
+            
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        
+        # Prepare content summary
+        content_summary = ""
+        if content_analysis:
+            cs = content_analysis.get("content_score", 0)
+            content_summary = f"Content score: {cs}\n"
+            if "master_summary" in content_analysis:
+                content_summary += f"Summary: {content_analysis.get('master_summary')}\n"
+        
+        # Create the prompt
+        system_prompt = f"""You are {name}, a {style} shark on Shark Tank. 
+        Analyze this pitch and provide feedback. Be concise, direct, and in character.
+        Focus on business viability, market potential, and investment potential.
+        
+        Format your response as a JSON object with these fields:
+        - feedback: Your detailed feedback
+        - verdict: "Deal", "No Deal", or "Need More Info"
+        - tips: List of specific suggestions (2-3 items)"""
+        
+        human_text = f"""Pitch Transcript:
+        {transcript[:8000]}  # Truncate to stay within context window
+        
+        Delivery Score: {delivery_score}/100
+        Content Analysis: {content_summary}"""
+        
+        # Generate response
+        response = model.generate_content([
+            {"role": "user", "parts": [system_prompt]},
+            {"role": "model", "parts": ["Understood. I'll analyze the pitch as requested."]},
+            {"role": "user", "parts": [human_text]}
+        ])
+        
+        # Parse response
+        try:
+            result = json.loads(response.text)
+            return {
+                "name": name,
+                "feedback": result.get("feedback", "No feedback provided"),
+                "verdict": result.get("verdict", "Need More Info"),
+                "tips": result.get("tips", [])
+            }
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse Gemini response as JSON")
+            return {
+                "name": name,
+                "feedback": response.text[:1000],
+                "verdict": "Need More Info",
+                "tips": ["Could not parse response - please review manually"]
+            }
+            
+    except Exception as e:
+        logger.error(f"Error in Gemini shark analysis: {str(e)}")
+        return get_dummy_response(name)
+
+def get_dummy_response(name: str) -> Dict[str, Any]:
+    """Fallback response if analysis fails"""
+    return {
+        "name": name,
+        "feedback": f"{name} is currently unavailable. Please try again later.",
+        "verdict": "Need More Info",
+        "tips": ["Service temporarily unavailable"]
+    }
