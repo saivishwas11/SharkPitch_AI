@@ -1,139 +1,175 @@
-from typing import Dict, Any
+# utils/llm_utils.py
+from pathlib import Path
+import os
 import threading
 import time
 import re
 import math
+import logging
+import json
+from typing import Dict, Any, List
 
-from langchain_groq import ChatGroq
-import groq
-from config import GROQ_MODEL
+# load .env if present (safe)
+try:
+    from dotenv import load_dotenv, find_dotenv
+    load_dotenv(find_dotenv() or str(Path(__file__).resolve().parents[1] / ".env"))
+except Exception:
+    pass
 
-# Global lock to ensure only one request happens at a time
+logger = logging.getLogger("llm_utils")
+logger.setLevel(logging.INFO)
+
+# Try to import real Groq/langchain bindings; if missing, we'll fall back to DummyLLM
+_HAS_GROQ = False
+try:
+    from langchain_groq import ChatGroq  # type: ignore
+    import groq  # type: ignore
+    _HAS_GROQ = True
+except Exception:
+    ChatGroq = None
+    groq = None
+    _HAS_GROQ = False
+    logger.debug("langchain_groq/groq not available; falling back to DummyLLM if no key.")
+
+# Model id from config or env
+try:
+    from config import GROQ_MODEL  # type: ignore
+except Exception:
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "gpt-4o-mini")
+
 _API_LOCK = threading.Lock()
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # may be None
 
+# If real client available AND key present -> use a rate-limited wrapper
+if _HAS_GROQ and _GROQ_API_KEY:
 
-class RateLimitedChatGroq(ChatGroq):
-    """
-    A wrapper around ChatGroq that:
-    1. Enforces strict serialization (one request at a time) using a global lock.
-    2. Catches 429 RateLimitErrors.
-    3. Parses the 'try again in X seconds' part of the error message.
-    4. Waits exactly that amount + small buffer.
-    5. Retries.
-    """
-    def invoke(self, input, config=None, **kwargs):
-        # Acquire lock to ensure no other agent is using the LLM
-        with _API_LOCK:
-            while True:
-                try:
-                    return super().invoke(input, config=config, **kwargs)
-                except Exception as e:
-                    # Check if it's a Groq rate limit error
-                    # It often comes as a groq.RateLimitError or has status_code=429
-                    is_rate_limit = False
-                    error_msg = str(e)
-                    
-                    if isinstance(e, groq.RateLimitError):
-                        is_rate_limit = True
-                    elif "429" in error_msg or "rate limit" in error_msg.lower():
-                        is_rate_limit = True
-                    
-                    if not is_rate_limit:
-                        raise e
-                    
-                    # Extract wait time
-                    # Look for "Please try again in 23.13s" or similar
-                    match = re.search(r"try again in (\d+(\.\d+)?)s", error_msg)
-                    wait_time = 5.0 # default fallback
-                    if match:
-                        wait_time = float(match.group(1))
-                    
-                    # Add a small buffer just in case
-                    wait_time = math.ceil(wait_time) + 1.0
-                    
-                    print(f"\n[RateLimitedChatGroq] Hit rate limit. Waiting {wait_time}s before retrying...\n")
-                    time.sleep(wait_time)
-                    # Retry loop continues
+    class RateLimitedChatGroq(ChatGroq):  # type: ignore
+        def __init__(self, *args, **kwargs):
+            kwargs.setdefault("api_key", _GROQ_API_KEY)
+            super().__init__(*args, **kwargs)
 
+        def invoke(self, messages: List[Any], config=None, **kwargs):
+            # serialize calls and retry on rate-limit
+            with _API_LOCK:
+                while True:
+                    try:
+                        return super().invoke(messages, config=config, **kwargs)
+                    except Exception as e:
+                        msg = str(e)
+                        # detect rate limit heuristically
+                        if "429" not in msg and "rate" not in msg.lower() and "too many" not in msg.lower():
+                            logger.exception("LLM invocation failed (non-rate-limit).")
+                            raise
+                        wait = 5
+                        m = re.search(r"try again in (\d+(\.\d+)?)s", msg)
+                        if m:
+                            try:
+                                wait = float(m.group(1))
+                            except Exception:
+                                pass
+                        wait = math.ceil(wait) + 1
+                        logger.warning("Rate limit hit. Waiting %ss before retry...", wait)
+                        time.sleep(wait)
 
-def get_llm(temperature: float = 0.0) -> ChatGroq:
-    return RateLimitedChatGroq(model=GROQ_MODEL, temperature=temperature, max_retries=0)
+    def get_llm(temperature: float = 0.0):
+        return RateLimitedChatGroq(model=GROQ_MODEL, temperature=temperature, api_key=_GROQ_API_KEY)
+
+else:
+    # Dummy LLM implementation for local development / testing
+    class DummyResponse:
+        def __init__(self, content: str):
+            self.content = content
+
+    class DummyLLM:
+        def __init__(self, model: str = None, temperature: float = 0.0, api_key: str = None):
+            self.model = model
+            self.temperature = temperature
+            self.api_key = api_key
+            logger.info("Initialized DummyLLM (no GROQ API key or libs). Responses are placeholders.")
+
+        def invoke(self, messages: List[Any], config=None, **kwargs):
+            # build a short echo to include some context for downstream parsers
+            try:
+                # langchain_core.messages objects often have .content
+                pieces = []
+                for m in messages:
+                    pieces.append(getattr(m, "content", str(m)))
+                joined = "\n\n".join(pieces)[:1500]
+            except Exception:
+                joined = " ".join([str(m) for m in messages])[:1500]
+            # return JSON string so parse_json_safely can find an object
+            payload = {
+                "note": "dummy response (no GROQ_API_KEY or langchain_groq)",
+                "echo": joined,
+            }
+            return DummyResponse(json.dumps(payload))
+
+    def get_llm(temperature: float = 0.0):
+        return DummyLLM(model=GROQ_MODEL, temperature=temperature, api_key=_GROQ_API_KEY)
+
+# --- Utility functions that other modules import ---
 
 
 def parse_json_safely(text: str) -> Dict[str, Any]:
-    import json
-
-    text = text.strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1:
+    """
+    Extract the first JSON object in `text` and parse it.
+    Raises ValueError if no JSON found or parsing fails.
+    """
+    if not text:
+        raise ValueError("Empty model response")
+    s = text.strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start == -1 or end == -1 or end < start:
         raise ValueError("No JSON object found in model output")
-    return json.loads(text[start : end + 1])
+    json_text = s[start : end + 1]
+    return json.loads(json_text)
 
 
-SHARK_SYSTEM_TEMPLATE = """You are {name}, a Shark Tank-style investor.
-Your style: {style}.
-
-You receive:
-- delivery_score: how strong the vocal delivery is (0-100)
-- content_score: how strong the business content is (0-100)
-- a breakdown from several analysis agents
-- the full pitch transcript
-
-Provide:
-1. A short paragraph of feedback in FIRST PERSON ("I") as this shark.
-2. 2 bullet-point improvement tips.
-3. A final verdict: "Invest", "Not Invest", or "Need More Info".
-
-Return JSON ONLY in this format:
-{{
-  "name": "...",
-  "feedback": "...",
-  "tips": ["...", "..."],
-  "verdict": "Invest | Not Invest | Need More Info"
-}}
-No extra text.
-"""
+def invoke_llm(messages: List[Any], temperature: float = 0.0):
+    """
+    Convenience wrapper used by content/master_agent.py and elsewhere.
+    Returns the raw response object (expected to have .content).
+    """
+    llm = get_llm(temperature=temperature)
+    resp = llm.invoke(messages)
+    return resp
 
 
-def _summarize_content_agents(content_analysis: Dict[str, Any]) -> str:
-    agents = content_analysis.get("agents", {})
-    return (
-        "Content analysis agents output:\n"
-        f"Problem Agent: {agents.get('problem')}\n"
-        f"Market Agent: {agents.get('market')}\n"
-        f"Finance Agent: {agents.get('finance')}\n"
-        f"Competition Agent: {agents.get('competition')}\n"
-        f"Structure Agent: {agents.get('structure')}\n"
-        f"Overall content_score: {content_analysis.get('content_score')}"
-    )
+# Backwards-compatible function used by sharks in some versions
+def run_shark_persona(name: str, style: str, transcript: str, delivery_score: float, content_analysis: Dict[str, Any]):
+    """
+    Simple adapter to call the LLM for a shark persona. Returns parsed JSON if possible,
+    otherwise returns a fallback dict.
+    """
+    from langchain_core.messages import SystemMessage, HumanMessage  # imported here to avoid top-level dependency
 
-
-def run_shark_persona(
-    name: str,
-    style: str,
-    transcript: str,
-    delivery_score: float,
-    content_analysis: Dict[str, Any],
-) -> Dict[str, Any]:
-    llm = get_llm(temperature=0.7)
+    SHARK_SYSTEM_TEMPLATE = """You are {name}. Style: {style}. Return JSON only as described."""
     sys_prompt = SHARK_SYSTEM_TEMPLATE.format(name=name, style=style)
-    content_score = content_analysis.get("content_score")
-    content_summary = _summarize_content_agents(content_analysis)
+    content_summary = ""
+    if content_analysis:
+        cs = content_analysis.get("content_score")
+        content_summary = f"Content score: {cs}\n"
+        if "master_summary" in content_analysis:
+            content_summary += f"Summary: {content_analysis.get('master_summary')}\n"
 
-    from langchain_core.messages import SystemMessage, HumanMessage
-
-    resp = llm.invoke(
-        [
-            SystemMessage(content=sys_prompt),
-            HumanMessage(
-                content=(
-                    f"Delivery score: {delivery_score}\n"
-                    f"Content score: {content_score}\n"
-                    f"Detailed analysis:\n{content_summary}\n\n"
-                    f"Full transcript:\n{transcript}"
-                )
-            ),
-        ]
+    human_text = (
+        f"Delivery score: {delivery_score}\n"
+        f"{content_summary}\n"
+        f"Full transcript:\n{transcript}"
     )
-    return parse_json_safely(resp.content)
+
+    resp = invoke_llm([SystemMessage(content=sys_prompt), HumanMessage(content=human_text)], temperature=0.7)
+    raw_text = getattr(resp, "content", str(resp))
+    try:
+        parsed = parse_json_safely(raw_text)
+        return parsed
+    except Exception:
+        logger.exception("Shark persona output parse failed; returning fallback.")
+        return {
+            "name": name,
+            "feedback": raw_text[:1000],
+            "tips": [],
+            "verdict": "Need More Info",
+            "_raw": raw_text,
+        }

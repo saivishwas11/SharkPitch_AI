@@ -1,9 +1,12 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Groq/OpenAI model used for LLM calls
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")  # replace with your model id if needed
 
+# Other helpful defaults (can be overridden via env)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# ASR defaults
+GROQ_ASR_MODEL = os.getenv("GROQ_ASR_MODEL", "whisper-large-v3")
+GROQ_RATE_LIMIT_PER_MINUTE = int(os.getenv("GROQ_RATE_LIMIT_PER_MINUTE", "30"))
