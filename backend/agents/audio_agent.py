@@ -1,20 +1,11 @@
 import logging
 import os
-import sys
 from pathlib import Path
-from typing import Any, Tuple, Optional
+from typing import Tuple, Optional
 
 import numpy as np
 from backend.graph.state_types import PitchState
-
-# Import audio processing utilities
-try:
-    from backend.utils.audio_processing import _load_audio_file_to_numpy, extract_audio_from_video
-except ImportError as e:
-    raise ImportError(
-        "Failed to import audio_processing utils. Make sure all dependencies are installed. "
-        "Run 'pip install -r requirements.txt' and ensure all audio processing libraries are available."
-    ) from e
+from backend.utils.audio_processing import load_and_prepare_audio
 
 logger = logging.getLogger(__name__)
 
@@ -65,24 +56,25 @@ def audio_agent_node(state: PitchState) -> PitchState:
         return state
         
     logger.info(f"Processing input file: {path}")
-    
+
     try:
-        # Check if input is an audio file
-        is_audio = path.suffix.lower() in {'.wav', '.mp3', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.aiff', '.aif'}
-        
-        if is_audio:
-            logger.info("Detected audio file, processing directly...")
-            # For audio files, we can process directly without video extraction
-            audio_np, sr = _load_audio_file_to_numpy(str(path), sr=16000)
-            clean_path = str(path)  # Use original path for audio files
-        else:
-            logger.info("Detected video file, extracting audio...")
-            # For video files, extract audio first
-            from utils.audio_processing import extract_audio_from_video, _load_audio_file_to_numpy
-            audio_path = extract_audio_from_video(str(path), sr=16000)
-            audio_np, sr = _load_audio_file_to_numpy(audio_path, sr=16000)
-            clean_path = audio_path
-        
+        # Use shared utility that handles both audio and video paths
+        logger.info("Loading and preparing audio (handles audio or video automatically)...")
+        audio_np, sr, clean_path = load_and_prepare_audio(str(path), target_sr=16000)
+
+        # Determine if original input was audio based on extension
+        is_audio = path.suffix.lower() in {
+            ".wav",
+            ".mp3",
+            ".flac",
+            ".m4a",
+            ".aac",
+            ".ogg",
+            ".wma",
+            ".aiff",
+            ".aif",
+        }
+
         # Validate the output
         is_valid, error_msg = validate_audio_output(audio_np, sr, clean_path)
         if not is_valid:

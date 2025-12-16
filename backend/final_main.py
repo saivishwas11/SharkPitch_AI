@@ -25,6 +25,15 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, cast
 
 # ------------------------------------------------------------------
+# Ensure project root is on sys.path so `backend` package is importable
+# This allows running the script directly from the `backend` directory:
+#   python final_main.py <audio_or_video_file>
+# ------------------------------------------------------------------
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+# ------------------------------------------------------------------
 # Silence noisy warnings (environment-related, not logic issues)
 # ------------------------------------------------------------------
 warnings.filterwarnings("ignore", category=DeprecationWarning)

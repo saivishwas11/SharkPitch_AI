@@ -12,7 +12,8 @@ Athena_Task/
 │   ├── graph/           # LangGraph workflow definitions
 │   ├── sharks/          # Shark Tank evaluator agents
 │   ├── utils/           # Utility functions and helpers
-│   ├── main.py          # Main entry point
+│   ├── main.py          # Main entry point (CLI)
+│   ├── api_server.py    # FastAPI REST API server
 │   ├── config.py        # Configuration settings
 │   └── requirements.txt # Python dependencies
 │
@@ -149,6 +150,20 @@ The frontend will be available at `http://localhost:5173` (or the port shown in 
 - **Vite**: Fast build tool and dev server
 - **shadcn-ui**: Component library
 - **Tailwind CSS**: Utility-first styling
+
+## Backend-Frontend Integration
+
+The backend and frontend are fully integrated. See [INTEGRATION.md](./INTEGRATION.md) for:
+- Setup instructions for both services
+- API endpoint documentation
+- Data flow explanation
+- Troubleshooting guide
+
+**Quick Start:**
+1. Start backend: `cd backend && python api_server.py`
+2. Start frontend: `cd frontend && bun run dev`
+3. Open `http://localhost:5173` in your browser
+4. Upload a pitch file and see real-time analysis!
 
 ## Deployment
 
