@@ -11,7 +11,6 @@ Features:
 - Concurrency-safe (semaphore)
 - Clean, normalized output
 
-NO Gemini
 NO httpx
 """
 

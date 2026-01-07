@@ -24,9 +24,7 @@ This document explains how to run and integrate the backend API server with the 
 3. Set up environment variables (create `.env` file in `backend/`):
    ```env
    GROQ_API_KEY=your_groq_api_key
-   GEMINI_API_KEY=your_gemini_api_key
-   GROQ_MODEL=openai/gpt-oss-20b
-   GEMINI_MODEL=models/gemini-2.5-pro
+   GROQ_MODEL=llama-3.3-70b-versatile
    ```
 
 4. Start the API server:

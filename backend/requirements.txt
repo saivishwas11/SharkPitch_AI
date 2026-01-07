@@ -13,8 +13,6 @@ pydub
 ffmpeg-python
 moviepy
 tqdm
-google-api-python-client
-google-generativeai>=0.8.0
 numpy<2
 soundfile>=0.12.1
 SpeechRecognition>=3.10.0

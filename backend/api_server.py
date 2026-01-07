@@ -48,14 +48,11 @@ logger = logging.getLogger(__name__)
 
 # Verify environment variables are loaded
 GROQ_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GROQ_KEY:
     logger.warning("GROQ_API_KEY not found in environment variables. Make sure .env file is configured.")
-if not GEMINI_KEY:
-    logger.warning("GEMINI_API_KEY not found in environment variables. Make sure .env file is configured.")
-if GROQ_KEY and GEMINI_KEY:
-    logger.info("API keys loaded successfully from environment variables.")
+if GROQ_KEY:
+    logger.info("Groq API key loaded successfully from environment variables.")
 
 # Initialize FastAPI app
 app = FastAPI(

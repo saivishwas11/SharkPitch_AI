@@ -68,9 +68,7 @@ SharkPitch AI/
    Create a `.env` file in the `backend` directory with:
    ```env
    GROQ_API_KEY=your_groq_api_key
-   GEMINI_API_KEY=your_gemini_api_key
-   GROQ_MODEL=openai/gpt-oss-20b
-   GEMINI_MODEL=models/gemini-2.5-pro
+   GROQ_MODEL=llama-3.3-70b-versatile
    ```
 
 ### Running the Backend
@@ -197,9 +195,7 @@ The backend and frontend are fully integrated. See [INTEGRATION.md](./INTEGRATIO
 ### Backend (.env in backend/)
 
 - `GROQ_API_KEY`: API key for Groq LLM services
-- `GEMINI_API_KEY`: API key for Google Gemini
-- `GROQ_MODEL`: Model identifier for Groq (default: `openai/gpt-oss-20b`)
-- `GEMINI_MODEL`: Model identifier for Gemini (default: `models/gemini-2.5-pro`)
+- `GROQ_MODEL`: Model identifier for Groq (default: `llama-3.3-70b-versatile`)
 - `GROQ_ASR_MODEL`: ASR model identifier (default: `whisper-large-v3`)
 - `GROQ_RATE_LIMIT_PER_MINUTE`: Rate limit for API calls (default: `30`)
 
