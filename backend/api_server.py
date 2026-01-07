@@ -46,6 +46,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress verbose watchfiles logging (only show warnings and errors)
+logging.getLogger('watchfiles.main').setLevel(logging.WARNING)
+
 # Verify environment variables are loaded
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 

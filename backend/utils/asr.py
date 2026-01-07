@@ -189,12 +189,26 @@ def transcribe_audio_safe(
     audio_path: str,
     language: str = "en",
     word_timestamps: bool = True,
+    model: Optional[str] = None,  # Accept but ignore for now
+    timestamps: bool = True,      # Accept but ignore (use word_timestamps)
+    backend: str = "groq",        # Accept but ignore (only groq supported)
 ) -> Dict[str, Any]:
+    """
+    Safe wrapper for transcribe_audio with additional parameters for compatibility.
+    
+    Args:
+        audio_path: Path to audio file
+        language: Language code (default: "en")
+        word_timestamps: Whether to include word-level timestamps
+        model: Model name (ignored, uses GROQ_ASR_MODEL from env)
+        timestamps: Whether to include timestamps (ignored, uses word_timestamps)
+        backend: ASR backend (ignored, only groq supported)
+    """
     try:
         return transcribe_audio(
             audio_path=audio_path,
             language=language,
-            word_timestamps=word_timestamps,
+            word_timestamps=word_timestamps or timestamps,
         )
     except Exception as e:
         raise ASRError(f"Groq ASR failed: {e}") from e
