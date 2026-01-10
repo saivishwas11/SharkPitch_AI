@@ -1,12 +1,8 @@
 from backend.graph.state_types import PitchState
 from backend.utils.llm_utils import run_shark_persona
 
-
-def skeptic_shark_node(state: PitchState) -> PitchState:
+def skeptic_shark_node(state: PitchState) -> dict:
     """Skeptic shark analysis focusing on risks, challenges, and potential pitfalls."""
-    if "shark_panel" not in state:
-        state["shark_panel"] = {}
-    
     result = run_shark_persona(
         name="Skeptic Shark",
         style="skeptical, focused on identifying risks, challenges, and potential pitfalls",
@@ -15,7 +11,7 @@ def skeptic_shark_node(state: PitchState) -> PitchState:
         content_analysis=state.get("content_analysis", {})
     )
     
-    # Store in both locations for aggregator and direct access
-    state["shark_panel"]["skeptic"] = result
-    state["shark_skeptic"] = result
-    return state
+    return {
+        "shark_panel": {"skeptic": result},
+        "shark_skeptic": result
+    }

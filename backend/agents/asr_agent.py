@@ -41,6 +41,12 @@ def asr_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("ASR result length=%d", len(state["transcript"]))
     except Exception as e:
         logger.exception("ASR failed: %s", e)
-        state["asr_error"] = str(e)
+        return {"asr_error": str(e)}
 
-    return state
+    return {
+        "transcript": result.get("text", "") or "",
+        "transcript_segments": result.get("segments") or [],
+        "asr_text": result.get("text", "") or "",
+        "asr_segments": result.get("segments"),
+        "asr_raw": result.get("raw")
+    }

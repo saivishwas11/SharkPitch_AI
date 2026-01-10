@@ -32,19 +32,25 @@ def build_graph():
     workflow.add_node("customer_shark", customer_shark_node)
     workflow.add_node("skeptic_shark", skeptic_shark_node)
 
-    # Flow: audio -> voice -> asr
+    # Flow: audio -> (voice, asr)
     workflow.set_entry_point("audio_agent")
     workflow.add_edge("audio_agent", "voice_agent")
-    workflow.add_edge("voice_agent", "asr_agent")
+    workflow.add_edge("audio_agent", "asr_agent")
 
     # ASR -> Master content agent
     workflow.add_edge("asr_agent", "master_agent")
 
-    # Sequential sharks: master -> visionary -> finance -> customer -> skeptic
+    # Parallel sharks: master -> (visionary, finance, customer, skeptic)
     workflow.add_edge("master_agent", "visionary_shark")
-    workflow.add_edge("visionary_shark", "finance_shark")
-    workflow.add_edge("finance_shark", "customer_shark")
-    workflow.add_edge("customer_shark", "skeptic_shark")
+    workflow.add_edge("master_agent", "finance_shark")
+    workflow.add_edge("master_agent", "customer_shark")
+    workflow.add_edge("master_agent", "skeptic_shark")
+
+    # Connect voice and sharks to END
+    workflow.add_edge("voice_agent", END)
+    workflow.add_edge("visionary_shark", END)
+    workflow.add_edge("finance_shark", END)
+    workflow.add_edge("customer_shark", END)
     workflow.add_edge("skeptic_shark", END)
 
     app = workflow.compile()

@@ -72,3 +72,29 @@ def run_pipeline(input_file: str) -> Dict[str, Any]:
         raise
 
 
+def stream_pipeline(input_file: str):
+    """
+    Stream the pipeline execution steps.
+    Each yield is a dictionary containing the updates from a single node.
+    """
+    try:
+        # Build the graph
+        app = build_graph()
+        logger.info("Graph compiled successfully for streaming")
+
+        # Prepare initial state
+        initial_state = {
+            "input_path": str(Path(input_file).resolve()),
+        }
+
+        logger.info(f"Starting streaming pipeline with input: {input_file}")
+
+        # stream() returns an iterator of updates where each update is {node_name: {state_delta}}
+        for update in app.stream(initial_state):
+            yield update
+
+        logger.info("Streaming pipeline completed successfully")
+
+    except Exception as e:
+        logger.exception(f"Streaming pipeline failed: {str(e)}")
+        raise

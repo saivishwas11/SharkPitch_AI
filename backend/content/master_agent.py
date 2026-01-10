@@ -146,17 +146,18 @@ def run_master_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if not transcript:
         logger.warning("MasterAgent: empty transcript")
-        state["content_analysis"] = {
-            "business_viability_score": 0.0,
-            "content_score": 0.0,
-            "metrics": {},
-            "structure": {},
-            "master_summary": "",
-            "key_strengths": [],
-            "key_risks": ["No transcript provided"],
-            "investment_recommendation": "Insufficient Data",
+        return {
+            "content_analysis": {
+                "business_viability_score": 0.0,
+                "content_score": 0.0,
+                "metrics": {},
+                "structure": {},
+                "master_summary": "",
+                "key_strengths": [],
+                "key_risks": ["No transcript provided"],
+                "investment_recommendation": "Insufficient Data",
+            }
         }
-        return state
 
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
@@ -169,34 +170,22 @@ def run_master_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         parsed = parse_json_safely(resp.content)
     except Exception as e:
         logger.exception("MasterAgent JSON parse error")
-        state["content_analysis"] = {
-            "business_viability_score": 0.0,
-            "content_score": 0.0,
-            "metrics": {},
-            "structure": {},
-            "master_summary": "LLM output could not be parsed",
-            "key_strengths": [],
-            "key_risks": ["Parsing failure"],
-            "investment_recommendation": "Error",
+        return {
+            "content_analysis": {
+                "business_viability_score": 0.0,
+                "content_score": 0.0,
+                "metrics": {},
+                "structure": {},
+                "master_summary": "LLM output could not be parsed",
+                "key_strengths": [],
+                "key_risks": ["Parsing failure"],
+                "investment_recommendation": "Error",
+            }
         }
-        return state
 
     metrics = parsed.get("metrics", {})
 
     viability_score, recommendation = calculate_viability_score(metrics)
-
-    state["content_analysis"] = {
-        "business_viability_score": viability_score,
-        "content_score": viability_score,  # backward compatibility
-        "metrics": metrics,
-        "structure": parsed.get("structure", {}),
-        "master_summary": parsed.get("master_summary", ""),
-        "key_strengths": parsed.get("key_strengths", []),
-        "key_risks": parsed.get("key_risks", []),
-        "investment_recommendation": parsed.get(
-            "investment_recommendation", recommendation
-        ),
-    }
 
     logger.info(
         "Business Viability Score: %s/100 | Recommendation: %s",
@@ -204,12 +193,25 @@ def run_master_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         recommendation,
     )
 
-    return state
+    return {
+        "content_analysis": {
+            "business_viability_score": viability_score,
+            "content_score": viability_score,  # backward compatibility
+            "metrics": metrics,
+            "structure": parsed.get("structure", {}),
+            "master_summary": parsed.get("master_summary", ""),
+            "key_strengths": parsed.get("key_strengths", []),
+            "key_risks": parsed.get("key_risks", []),
+            "investment_recommendation": parsed.get(
+                "investment_recommendation", recommendation
+            ),
+        }
+    }
 
 
 # ------------------------------------------------------------------
 # LangGraph Node
 # ------------------------------------------------------------------
 
-def master_agent_node(state: PitchState) -> PitchState:
+def master_agent_node(state: PitchState) -> dict:
     return run_master_agent(state)

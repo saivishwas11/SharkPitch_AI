@@ -13,7 +13,8 @@ from typing import Dict, Any, Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import json
 from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
@@ -33,7 +34,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 # Import pipeline functions from backend package
-from backend.main import run_pipeline, validate_input_file
+from backend.main import run_pipeline, validate_input_file, stream_pipeline
 
 # Configure logging
 logging.basicConfig(
@@ -199,6 +200,32 @@ async def start_analysis(request: StartAnalysisRequest):
     except Exception as e:
         logger.exception(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.post("/api/stream-analysis")
+async def stream_analysis(request: StartAnalysisRequest):
+    """Start analysis and stream results as they are produced via SSE"""
+    file_path = Path(request.file_path)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    logger.info(f"Starting streaming analysis for: {file_path}")
+
+    def event_generator():
+        try:
+            for update in stream_pipeline(str(file_path)):
+                # update is something like {'node_name': {'field': value}}
+                # We yield each update as it comes in
+                yield f"data: {json.dumps(update)}\n\n"
+            
+            # Final event to signal completion
+            yield f"data: {json.dumps({'status': 'completed'})}\n\n"
+        except Exception as e:
+            logger.error(f"Error in stream generator: {str(e)}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_pitch(

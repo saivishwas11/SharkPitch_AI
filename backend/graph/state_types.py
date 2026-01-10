@@ -1,5 +1,12 @@
-from typing import TypedDict, Dict, Any, List
+from typing import TypedDict, Dict, Any, List, Annotated
 
+def merge_dicts(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    """Simple dict merge for parallel updates."""
+    if not left:
+        return right
+    if not right:
+        return left
+    return {**left, **right}
 
 class PitchState(TypedDict, total=False):
     # Input & audio
@@ -26,4 +33,4 @@ class PitchState(TypedDict, total=False):
     shark_finance: Dict[str, Any]
     shark_customer: Dict[str, Any]
     shark_skeptic: Dict[str, Any]
-    shark_panel: Dict[str, Any]
+    shark_panel: Annotated[Dict[str, Any], merge_dicts]
