@@ -96,9 +96,21 @@ class AnalysisResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
+class UploadResponse(BaseModel):
+    success: bool
+    file_path: str
+    message: str
+
+class StartAnalysisRequest(BaseModel):
+    file_path: str
+
 class HealthResponse(BaseModel):
     status: str
     message: str
+
+# Ensure upload directory exists
+UPLOAD_DIR = ROOT_DIR / "backend" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory storage for analysis results (in production, use Redis or database)
 analysis_results: Dict[str, Dict[str, Any]] = {}
@@ -118,6 +130,75 @@ async def health_check():
         status="healthy",
         message="API is operational"
     )
+
+@app.post("/api/upload", response_model=UploadResponse)
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file and store it for later analysis"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    file_ext = Path(file.filename).suffix.lower()
+    supported_extensions = ['.mp4', '.avi', '.mov', '.wav', '.mp3', '.mpeg', '.mpg']
+    
+    if file_ext not in supported_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format: {file_ext}"
+        )
+    
+    # Use a safe filename or generate one
+    safe_filename = f"{tempfile.mktemp(dir='')}_{file.filename}"
+    target_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        with open(target_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        logger.info(f"File uploaded to: {target_path}")
+        return UploadResponse(
+            success=True,
+            file_path=str(target_path),
+            message="File uploaded successfully"
+        )
+    except Exception as e:
+        logger.exception(f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/api/start-analysis", response_model=AnalysisResponse)
+async def start_analysis(request: StartAnalysisRequest):
+    """Start analysis on a previously uploaded file"""
+    file_path = Path(request.file_path)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    logger.info(f"Starting analysis for: {file_path}")
+    
+    try:
+        result = run_pipeline(str(file_path))
+        logger.info("Analysis pipeline completed successfully")
+        
+        response_data = {
+            "voice_stats": result.get("voice_stats", {}),
+            "transcript": result.get("transcript", ""),
+            "transcript_segments": result.get("transcript_segments", []),
+            "content_analysis": result.get("content_analysis", {}),
+            "shark_panel": result.get("shark_panel", {}),
+            "file_name": file_path.name,
+            "file_size": file_path.stat().st_size,
+        }
+        
+        # Optionally clean up the file after analysis
+        # os.remove(file_path)
+        
+        return AnalysisResponse(
+            success=True,
+            message="Analysis completed successfully",
+            data=response_data
+        )
+    except Exception as e:
+        logger.exception(f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
 async def analyze_pitch(
